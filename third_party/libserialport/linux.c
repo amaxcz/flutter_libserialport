@@ -52,21 +52,36 @@ SP_PRIV enum sp_return get_port_details(struct sp_port *port)
 	int i, count;
 	struct stat statbuf;
 
-	if (strncmp(port->name, "/dev/", 5))
-		RETURN_ERROR(SP_ERR_ARG, "Device name not recognized");
+	if (strncmp(port->name, "/dev/", 5) == 0) {
+		dev = port->name + 5;
+	} else {
+		ssize_t len = readlink(port->name, link_name, sizeof(link_name) - 1);
+		if (len == -1) {
+			fprintf(stderr, "Failed to read symbolic link\n");
+			RETURN_ERROR(SP_ERR_ARG, "Failed to read symbolic link");
+		}
+		link_name[len] = '\0';
 
-	snprintf(link_name, sizeof(link_name), "/sys/class/tty/%s", dev);
-	if (lstat(link_name, &statbuf) == -1) {
-		if (strncmp(port->name + 5, "pts/", 4))
+		if (strncmp(link_name, "/dev/pts/", 9) != 0) {
 			RETURN_ERROR(SP_ERR_ARG, "Device not found");
+		}
+
+		dev = link_name + 9;
+	}
+
+	if (strncmp(dev, "pts/", 4) == 0) {
 		port->transport = SP_TRANSPORT_PSEUDO;
 	} else {
+		if (access(dev, F_OK) == -1) {
+			RETURN_ERROR(SP_ERR_ARG, "Device not found");
+		}
+
 		if (!S_ISLNK(statbuf.st_mode))
 			snprintf(link_name, sizeof(link_name), "/sys/class/tty/%s/device", dev);
 		count = readlink(link_name, file_name, sizeof(file_name));
 		if (count <= 0 || count >= (int)(sizeof(file_name) - 1))
 			RETURN_ERROR(SP_ERR_ARG, "Device not found");
-		file_name[count] = 0;
+		file_name[count] = '\0';
 		if (strstr(file_name, "bluetooth"))
 			port->transport = SP_TRANSPORT_BLUETOOTH;
 		else if (strstr(file_name, "usb"))
@@ -119,7 +134,7 @@ SP_PRIV enum sp_return get_port_details(struct sp_port *port)
 				if ((ptr = fgets(description, sizeof(description), file))) {
 					ptr = description + strlen(description) - 1;
 					if (ptr >= description && *ptr == '\n')
-						*ptr = 0;
+						*ptr = '\0';
 					port->description = strdup(description);
 				}
 				fclose(file);
@@ -132,7 +147,7 @@ SP_PRIV enum sp_return get_port_details(struct sp_port *port)
 				if ((ptr = fgets(manufacturer, sizeof(manufacturer), file))) {
 					ptr = manufacturer + strlen(manufacturer) - 1;
 					if (ptr >= manufacturer && *ptr == '\n')
-						*ptr = 0;
+						*ptr = '\0';
 					port->usb_manufacturer = strdup(manufacturer);
 				}
 				fclose(file);
@@ -143,7 +158,7 @@ SP_PRIV enum sp_return get_port_details(struct sp_port *port)
 				if ((ptr = fgets(product, sizeof(product), file))) {
 					ptr = product + strlen(product) - 1;
 					if (ptr >= product && *ptr == '\n')
-						*ptr = 0;
+						*ptr = '\0';
 					port->usb_product = strdup(product);
 				}
 				fclose(file);
@@ -154,7 +169,7 @@ SP_PRIV enum sp_return get_port_details(struct sp_port *port)
 				if ((ptr = fgets(serial, sizeof(serial), file))) {
 					ptr = serial + strlen(serial) - 1;
 					if (ptr >= serial && *ptr == '\n')
-						*ptr = 0;
+						*ptr = '\0';
 					port->usb_serial = strdup(serial);
 				}
 				fclose(file);
@@ -180,7 +195,7 @@ SP_PRIV enum sp_return get_port_details(struct sp_port *port)
 				if ((ptr = fgets(baddr, sizeof(baddr), file))) {
 					ptr = baddr + strlen(baddr) - 1;
 					if (ptr >= baddr && *ptr == '\n')
-						*ptr = 0;
+						*ptr = '\0';
 					port->bluetooth_address = strdup(baddr);
 				}
 				fclose(file);
